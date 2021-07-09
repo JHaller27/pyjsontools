@@ -3,7 +3,7 @@ from json.decoder import JSONDecodeError
 import os
 import re
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 from dataclasses import dataclass
 
 
@@ -175,13 +175,25 @@ def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: b
     return data
 
 
-def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], bool] = None) -> list[JsonData]:
+def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool, tuple[bool, Any]]] = None) -> list[JsonData]:
     if filter_fn is None:
         filter_fn = lambda _: True
 
-    filtered = list(filter(filter_fn, data))
-    print("\n".join([d.path for d in filtered]))
-    print(f"({len(filtered)}/{len(data)} match)")
+    count = 0
+    for d in data:
+        result = filter_fn(d)
+        if isinstance(result, bool):
+            if result:
+                print(d.path)
+                count += 1
+
+        elif isinstance(result, tuple):
+            check, extra = result
+            if check:
+                print(d.path, "|", str(extra))
+                count += 1
+
+    print(f"({count}/{len(data)} match)")
 
 
 if __name__ == "__main__":
