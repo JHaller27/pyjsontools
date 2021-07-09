@@ -175,5 +175,14 @@ def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: b
     return data
 
 
+def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], bool] = None) -> list[JsonData]:
+    if filter_fn is None:
+        filter_fn = lambda _: True
+
+    filtered = list(filter(filter_fn, data))
+    print("\n".join([d.path for d in filtered]))
+    print(f"({len(filtered)}/{len(data)} match)")
+
+
 if __name__ == "__main__":
     print("Load files with load_files(start, [match_fn (default: endswith('*.json')], *, recurse=True).")
