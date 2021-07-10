@@ -6,26 +6,22 @@ all_data = pyjson.load_files("/home/james/git/CSME-Stores-AIOC-AEM/azureCSharp/T
 # all_data = pyjson.load_files("./data")
 
 def is_valid(data: pyjson.JsonData) -> bool:
-    avs = data.get_path(".Product.DisplaySkuAvailabilities[0].Availabilities[]")
+    avs = data.one("Product").many("DisplaySkuAvailabilities").one(0).many("Availabilities")
 
     for avidx, av in enumerate(avs):
 
         # Has BundleTag
-        if not av.get_path(".BundleTag").has_data():
+        if not av.one("BundleTag").has_data():
             continue
 
-        rems = av.get_path(".Remediations[]")
-        rems.any(lambda r: r.get_path(".Type"))
+        rems = av.many("Remediations")
+        rems.any(lambda r: \
+            # Has RemediationType = ChangeOrder
+            r.one("Type") == "ChangeOrder" and \
 
-        # Has RemediationType = ChangeOrder
-        rem_types = rems.get_path(".Type")
-        if not rem_types.any(lambda rt: rt == "ChangeOrder"):
-            continue
-
-        # Has BigIdCardinality = BundleEnforced
-        cardinality = rems.get_path(".CartBasedRemediation.RequiredBigIdCardinality")
-        if cardinality.any(lambda c: c != "BundleEnforced"):
-            continue
+            # Has BigIdCardinality = BundleEnforced
+            r.one("CartBasedRemediation").one("RequiredBigIdCardinality") == "BundleEnforced" \
+        )
 
         return True, avidx
 

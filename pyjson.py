@@ -1,108 +1,97 @@
-from functools import reduce
-from json.decoder import JSONDecodeError
 import os
 import re
 import json
-from typing import Any, Callable, Optional, Union
-from dataclasses import dataclass
+from typing import Any, Callable, Iterator, Optional, Union
 
 
-@dataclass
 class JsonData:
-    path_regex = re.compile(r"\.(?P<pathel>((?P<name>[A-Za-z][\w]*))?(?P<index>\[\d*\])?)|(?P<mismatch>.)")
-    path: str
-    content: Any
-
-    def __len__(self) -> str:
-        return len(self.content)
-
-    def __contains__(self, other) -> bool:
-        return other in self.content
-
-    def __iter__(self):
-        return map(lambda c: JsonData(path=self.path, content=c), self.content)
-
-    def __getitem__(self, idx: int):
-        return JsonData(path=self.path, content=self.content[idx])
+    def __init__(self, path: str, content: Any) -> None:
+        self._path = path
+        self._content = content
 
     def __eq__(self, other):
-        return self.content == other
+        return self._content == other
 
     def __str__(self) -> str:
-        return str(self.content)
+        return str(self._content)
 
     def __repr__(self) -> str:
-        return f"JsonData(path='{self.path}', content='{self.content}'"
+        return f"JsonData(path='{self._path}', content='{self._content}'"
+
+    @property
+    def none(self) -> 'JsonData':
+        return JsonData(path=self._path, content=None)
+
+    def one(self, key: str) -> 'JsonData':
+        if key is None:
+            return JsonData(path=self._path, content=self._content)
+
+        if not isinstance(self._content, dict):
+            return self.none
+
+        content = self._content.get(key)
+        return JsonData(path=self._path, content=content)
+
+    def many(self, key: str) -> 'JsonListData':
+        if key is None:
+            return JsonListData(path=self._path, content=self._content)
+
+        child = self.one(key)
+        return JsonListData(path=child._path, content=child._content)
 
     def has_data(self) -> bool:
-        return self.content is not None and len(self.content) > 0
+        return self._content is not None
 
-    def get_path(self, path: str) -> 'JsonData':
-        content = self._sub_content(path)
-        return JsonData(path=self.path, content=content)
 
-    def _sub_content(self, path: str) -> 'JsonData':
-        def _clone_content(content):
-            if isinstance(content, dict):
-                return dict(content)
-            if isinstance(content, list):
-                return list(content)
-            return content
+class JsonListData(JsonData):
+    def one(self, idx: int) -> 'JsonData':
+        if idx is None:
+            return JsonData(path=self._path, content=self._content)
 
-        some_match = False
-        curr = self.content
+        if not isinstance(self._content, list):
+            return self.none
 
-        for mo in JsonData.path_regex.finditer(path):
-            kind = mo.lastgroup
-            name = mo['name']
-            idx_str = mo['index']
+        if len(self._content) <= idx:
+            return self.none
 
-            if kind == "mismatch":
-                return JsonData(path=self.path, content=None)
+        content = self._content[idx]
+        return JsonData(path=self._path, content=content)
 
-            some_match = True
+    def many(self, key: str) -> 'JsonListData':
+        if key is None:
+            return self
 
-            if curr is None:
-                return JsonData(path=self.path, content=None)
+        if not isinstance(self._content, list):
+            return self.none
 
-            if not isinstance(curr, list):
-                curr = [curr]
-            curr = [_clone_content(c) for c in curr]
+        content = []
 
-            if name is not None:
-                try:
-                    curr = [c.get(name) for c in curr]
-                    curr = [x for x in curr if x is not None]
-                except AttributeError:
-                    return JsonData(path=self.path, content=None)
+        for item in self._content:
+            if isinstance(item, dict):
+                sub_item = item.get(key)
 
-            if idx_str is not None and curr is not None:
-                if not isinstance(curr, list):
-                    return JsonData(path=self.path, content=None)
+                if sub_item is not None:
+                    content.append(sub_item)
 
-                if idx_str == "[]":
-                    curr = reduce(lambda acc, el: acc + el, curr, [])
-                    continue
+        return JsonListData(path=self._path, content=content)
 
-                idx = int(idx_str[1:-1])
-                try:
-                    # curr = curr[idx]
-                    curr = [c[idx] for c in curr if len(c) > idx]
-                    # curr = reduce(lambda acc, el: acc + [el[idx]] if idx < len(el) else None, curr)
-                    curr = [x for x in curr if x is not None]
-                except IndexError:
-                    return JsonData(path=self.path, content=None)
+    def has_data(self) -> bool:
+        return super().has_data() and len(self._content) > 0
 
-            if len(curr) == 0:
-                return curr
+    def __repr__(self) -> str:
+        return f"JsonListData(path='{self._path}', content='{self._content}'"
 
-        if not some_match:
-            return JsonData(path=self.path, content=None)
+    def __len__(self) -> str:
+        return len(self._content)
 
-        return curr
+    def __contains__(self, other) -> bool:
+        return other in self._content
 
-    def has_path(self, path: str) -> bool:
-        return self.get_path(path) is not None
+    def __iter__(self) -> Iterator[JsonData]:
+        if not self.has_data():
+            return iter([])
+
+        return map(lambda c: JsonData(path=self._path, content=c), self._content)
 
     def where(self, callback: Callable[['JsonData'], bool]) -> 'JsonData':
         return [d for d in self if callback(d)]
@@ -168,7 +157,7 @@ def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: b
                 content = None
                 try:
                     content = json.loads(sdata)
-                except JSONDecodeError as err:
+                except json.JSONDecodeError as err:
                     print(f"Warning: Failed to parse '{path}' as JSON")
                     print(f"\t{err}")
                 finally:
@@ -190,13 +179,13 @@ def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool,
         result = filter_fn(d)
         if isinstance(result, bool):
             if result:
-                print(d.path)
+                print(d._path)
                 count += 1
 
         elif isinstance(result, tuple):
             check, extra = result
             if check:
-                print(d.path, "|", str(extra))
+                print(d._path, "|", str(extra))
                 count += 1
 
     print(f"({count}/{len(data)} match)")
