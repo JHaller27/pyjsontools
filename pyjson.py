@@ -34,12 +34,14 @@ class JsonData:
     def __repr__(self) -> str:
         return f"JsonData(path='{self.path}', content='{self.content}'"
 
-    def get_path(self, path: str) -> 'JsonData':
-        if content := self._sub_content(path):
-            return JsonData(path=self.path, content=content)
-        return None
+    def has_data(self) -> bool:
+        return self.content is not None and len(self.content) > 0
 
-    def _sub_content(self, path: str) -> Optional['JsonData']:
+    def get_path(self, path: str) -> 'JsonData':
+        content = self._sub_content(path)
+        return JsonData(path=self.path, content=content)
+
+    def _sub_content(self, path: str) -> 'JsonData':
         def _clone_content(content):
             if isinstance(content, dict):
                 return dict(content)
@@ -56,12 +58,12 @@ class JsonData:
             idx_str = mo['index']
 
             if kind == "mismatch":
-                return None
+                return JsonData(path=self.path, content=None)
 
             some_match = True
 
             if curr is None:
-                return None
+                return JsonData(path=self.path, content=None)
 
             if not isinstance(curr, list):
                 curr = [curr]
@@ -72,11 +74,11 @@ class JsonData:
                     curr = [c.get(name) for c in curr]
                     curr = [x for x in curr if x is not None]
                 except AttributeError:
-                    return None
+                    return JsonData(path=self.path, content=None)
 
             if idx_str is not None and curr is not None:
                 if not isinstance(curr, list):
-                    return None
+                    return JsonData(path=self.path, content=None)
 
                 if idx_str == "[]":
                     curr = reduce(lambda acc, el: acc + el, curr, [])
@@ -89,10 +91,13 @@ class JsonData:
                     # curr = reduce(lambda acc, el: acc + [el[idx]] if idx < len(el) else None, curr)
                     curr = [x for x in curr if x is not None]
                 except IndexError:
-                    return None
+                    return JsonData(path=self.path, content=None)
+
+            if len(curr) == 0:
+                return curr
 
         if not some_match:
-            return None
+            return JsonData(path=self.path, content=None)
 
         return curr
 
@@ -107,7 +112,8 @@ class JsonData:
             callback = lambda _: True
 
         for jd in self:
-            if callback(jd):
+            result = callback(jd)
+            if result:
                 return True
 
         return False
