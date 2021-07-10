@@ -22,6 +22,10 @@ class JsonData:
     def none(self) -> 'JsonData':
         return JsonData(path=self._path, content=None)
 
+    @property
+    def value(self) -> Any:
+        return self._content
+
     def one(self, key: str) -> 'JsonData':
         if key is None:
             return JsonData(path=self._path, content=self._content)
@@ -89,6 +93,9 @@ class JsonListData(JsonData):
         return len(self._content)
 
     def __contains__(self, other) -> bool:
+        if not self.has_data():
+            return False
+
         return other in self._content
 
     def __iter__(self) -> Iterator[JsonData]:
