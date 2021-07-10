@@ -44,6 +44,10 @@ class JsonData:
 
 
 class JsonListData(JsonData):
+    @property
+    def none(self) -> 'JsonListData':
+        return JsonListData(path=self._path, content=None)
+
     def one(self, idx: int) -> 'JsonData':
         if idx is None:
             return JsonData(path=self._path, content=self._content)
@@ -101,8 +105,7 @@ class JsonListData(JsonData):
             callback = lambda _: True
 
         for jd in self:
-            result = callback(jd)
-            if result:
+            if callback(jd):
                 return True
 
         return False
