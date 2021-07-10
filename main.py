@@ -1,9 +1,10 @@
 import pyjson
+import sys
 
 
-all_data = pyjson.load_files("/home/james/git/CSME-Stores-AIOC-AEM/azureCSharp/Tests/Utilities/Data")
-# all_data = pyjson.load_files("/home/james/git/CSME-Stores-AIOC-AEM/adobeIo/jasmineTests/data")
-# all_data = pyjson.load_files("./data")
+data_dir = sys.argv[1]
+all_data = pyjson.load_files(data_dir)
+
 
 def is_valid(data: pyjson.JsonData) -> bool:
     avs = data.one("Product").many("DisplaySkuAvailabilities").one(0).many("Availabilities")
@@ -11,19 +12,21 @@ def is_valid(data: pyjson.JsonData) -> bool:
     for avidx, av in enumerate(avs):
 
         # Has BundleTag
-        if not av.one("BundleTag").has_data():
+        if av.one("BundleTag").has_data():
             continue
 
         rems = av.many("Remediations")
-        rems.any(lambda r: \
-            # Has RemediationType = ChangeOrder
-            r.one("Type") == "ChangeOrder" and \
+        for rem in rems:
+            rt = rem.one("Type")
 
-            # Has BigIdCardinality = BundleEnforced
-            r.one("CartBasedRemediation").one("RequiredBigIdCardinality") == "BundleEnforced" \
-        )
+            if rt == "Redirect":
+                return False
 
-        return True, avidx
+            elif rt == "ChangeOrder":
+                return False
+
+            else:
+                return True, avidx
 
     return False
 
