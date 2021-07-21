@@ -12,6 +12,9 @@ class JsonData:
     def __eq__(self, other):
         return self._content == other
 
+    def __lt__(self, other: 'JsonData'):
+        return self._content < other._content
+
     def __str__(self) -> str:
         return str(self._content)
 
@@ -187,15 +190,16 @@ def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool,
     count = 0
     for d in data:
         result = filter_fn(d)
-        if isinstance(result, bool):
-            if result:
-                print(d._path)
-                count += 1
 
-        elif isinstance(result, tuple):
+        if isinstance(result, tuple):
             check, extra = result
             if check:
                 print(d._path, "|", str(extra))
+                count += 1
+
+        else:
+            if result:
+                print(d._path)
                 count += 1
 
     print(f"({count}/{len(data)} match)")
