@@ -21,6 +21,12 @@ class JsonData:
     def __repr__(self) -> str:
         return f"JsonData(path='{self._path}', content='{self._content}'"
 
+    def __contains__(self, item) -> bool:
+        if not self.has_data():
+            return False
+
+        return item in self._content
+
     @property
     def none(self) -> 'JsonData':
         return JsonData(path=self._path, content=None)
@@ -94,12 +100,6 @@ class JsonListData(JsonData):
 
     def __len__(self) -> str:
         return len(self._content)
-
-    def __contains__(self, other) -> bool:
-        if not self.has_data():
-            return False
-
-        return other in self._content
 
     def __iter__(self) -> Iterator[JsonData]:
         if not self.has_data():
