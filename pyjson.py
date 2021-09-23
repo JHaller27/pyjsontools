@@ -1,5 +1,4 @@
 import os
-import re
 import json
 from typing import Any, Callable, Iterator, Optional, Union
 
@@ -88,7 +87,10 @@ class JsonListData(JsonData):
                 sub_item = item.get(key)
 
                 if sub_item is not None:
-                    content.append(sub_item)
+                    if isinstance(sub_item, list):
+                        content.extend(sub_item)
+                    else:
+                        content.append(sub_item)
 
         return JsonListData(path=self._path, content=content)
 
