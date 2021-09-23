@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 from typing import Any, Callable, Iterator, Optional, Union
 
 
@@ -183,6 +184,51 @@ def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: b
             return data
 
     return data
+
+
+def download_files(root: str, ids: list[str], batchsize: int = 20, force: bool = True):
+    import requests
+
+    out_root = Path(root)
+    index_path: Path = out_root / 'index.json'
+
+    if not force and index_path.is_file():
+        with index_path.open('r') as fp:
+            existing_ids = json.load(fp)
+        ids = list(set(ids) - set(existing_ids))
+
+    all_products = []
+    for i in range(0, len(ids), batchsize):
+        ids_str = ','.join(ids[i:i+batchsize])
+        url = f'https://products.production.store-web.dynamics.com/products/v1/byBigCatId?clientType=storeWeb&catalogIds=1&ids={ids_str}&market=us&languages=en-us&ms-cv=python-test'
+        print(url)
+        resp = requests.get(url)
+        if not resp.ok:
+            print(f'Download failed for productIds={ids_str} ({resp.status_code})')
+        else:
+            all_products.extend(resp.json()['Products'])
+
+    downloaded_count = len(all_products)
+
+    written_count = 0
+    new_ids = set()
+    for product in all_products:
+        filename = product['ProductId'] + '.json'
+        path: Path = out_root / filename
+
+        obj = {'Product': product}
+        with path.open('w') as fp:
+            json.dump(obj, fp)
+
+        written_count += 1
+        if product['ProductId'] in new_ids:
+            print(f'Overwritting duplicate productId {product["ProductId"]}')
+        new_ids.add(product['ProductId'])
+
+    with index_path.open('w') as fp:
+        json.dump(list(new_ids), fp)
+
+    return downloaded_count, written_count
 
 
 def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool, tuple[bool, Any]]] = None) -> list[JsonData]:
