@@ -19,7 +19,7 @@ class JsonData:
         return str(self._content)
 
     def __repr__(self) -> str:
-        return f"JsonData(path='{self._path}', content='{self._content}'"
+        return f"JsonData(path='{self._path}', content='{self._content}')"
 
     def __contains__(self, item) -> bool:
         if not self.has_data():
@@ -200,11 +200,11 @@ def load_files(*starts: str, match_fn: Callable[[str], bool] = None, recurse: bo
 
     all_data: tuple[dict[str, JsonData]] = tuple(_load_data_single_dir(start) for start in starts)
 
-    key_set = set()
+    key_set: set[str] = set()
     for data_dict in all_data:
         key_set = key_set.union(set(data_dict.keys()))
 
-    json_data_matches: tuple[tuple[JsonData, ...], ...] = tuple(tuple(d.get(k) for d in all_data) for k in key_set)
+    json_data_matches: tuple[tuple[JsonData, ...], ...] = tuple(tuple(d.get(key) for d in all_data) for key in key_set)
 
     return json_data_matches
 
@@ -254,7 +254,7 @@ def download_files(root: str, ids: list[str], batch_size: int = 20, force: bool 
     return downloaded_count, written_count
 
 
-def list_files(matched_data: tuple[tuple[JsonData, ...]], filter_fn: Callable[[JsonData], Union[bool, Union[tuple[bool, Any], bool]]] = None) -> None:
+def list_files(matched_data: tuple[tuple[JsonData, ...]], filter_fn: Callable[[Optional[JsonData], ...], Union[bool, Union[tuple[bool, Any], bool]]] = None) -> None:
     if filter_fn is None:
         def filter_fn(_):
             return True
