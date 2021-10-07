@@ -5,7 +5,7 @@ from typing import Any, Callable, Iterator, Optional, Union
 
 
 class JsonData:
-    def __init__(self, path: str, content: Any) -> None:
+    def __init__(self, path: Path, content: Any) -> None:
         self._path = path
         self._content = content
 
@@ -32,8 +32,12 @@ class JsonData:
         return JsonData(path=self._path, content=None)
 
     @property
-    def path(self) -> str:
+    def path(self) -> Path:
         return self._path
+
+    @property
+    def name(self) -> str:
+        return self._path.name
 
     @property
     def value(self) -> Any:
@@ -140,57 +144,69 @@ class JsonListData(JsonData):
         return True
 
 
-def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: bool = True) -> list[JsonData]:
+def load_files(*starts: str, match_fn: Callable[[str], bool] = None, recurse: bool = True) -> tuple[tuple[JsonData, ...], ...]:
     if match_fn is None:
         def match_fn(p):
             return p.endswith(".json")
 
-    data: list[JsonData] = []
+    def _load_data_single_dir(start: str) -> dict[str, JsonData]:
+        data: dict[str, JsonData] = {}
 
-    for root, d_names, f_names in os.walk(start):
-        for fname in f_names:
-            path = os.path.join(root, fname)
-            if not match_fn(path):
-                continue
+        for root, d_names, f_names in os.walk(start):
+            for fname in f_names:
+                path = os.path.join(root, fname)
+                if not match_fn(path):
+                    continue
 
-            with open(path, "rb") as fin:
-                # Read file as bytes (opened in binary mode)
-                b_data = fin.read()
+                with open(path, "rb") as fin:
+                    # Read file as bytes (opened in binary mode)
+                    b_data = fin.read()
 
-                # Try to decode file content to string
-                try:
-                    s_data = b_data.decode("utf-8")
-                except UnicodeDecodeError:
-                    s_data = b_data.decode("latin1")
+                    # Try to decode file content to string
+                    try:
+                        s_data = b_data.decode("utf-8")
+                    except UnicodeDecodeError:
+                        s_data = b_data.decode("latin1")
 
-                # Ignore garbage at beginning
-                first_obj_idx = s_data.find("{")
-                if first_obj_idx == -1:
-                    first_obj_idx = len(s_data)
+                    # Ignore garbage at beginning
+                    first_obj_idx = s_data.find("{")
+                    if first_obj_idx == -1:
+                        first_obj_idx = len(s_data)
 
-                first_arr_idx = s_data.find("[")
-                if first_arr_idx == -1:
-                    first_arr_idx = len(s_data)
+                    first_arr_idx = s_data.find("[")
+                    if first_arr_idx == -1:
+                        first_arr_idx = len(s_data)
 
-                start_json_idx = min(first_obj_idx, first_arr_idx)
+                    start_json_idx = min(first_obj_idx, first_arr_idx)
 
-                s_data = s_data[start_json_idx:]
+                    s_data = s_data[start_json_idx:]
 
-                # Try parse as JSON
-                content = None
-                try:
-                    content = json.loads(s_data)
-                except json.JSONDecodeError as err:
-                    print(f"Warning: Failed to parse '{path}' as JSON")
-                    print(f"\t{err}")
-                finally:
-                    data.append(JsonData(path=path, content=content))
+                    # Try parse as JSON
+                    content = None
+                    try:
+                        content = json.loads(s_data)
+                    except json.JSONDecodeError as err:
+                        print(f"Warning: Failed to parse '{path}' as JSON")
+                        print(f"\t{err}")
+                    finally:
+                        if fname not in data:
+                            data[fname] = JsonData(path=Path(path), content=content)
 
-        # If we're not recursing, return after first loop iteration
-        if not recurse:
-            return data
+            # If we're not recursing, return after first loop iteration
+            if not recurse:
+                return data
 
-    return data
+        return data
+
+    all_data: tuple[dict[str, JsonData]] = tuple(_load_data_single_dir(start) for start in starts)
+
+    key_set = set()
+    for data_dict in all_data:
+        key_set = key_set.union(set(data_dict.keys()))
+
+    json_data_matches: tuple[tuple[JsonData, ...], ...] = tuple(tuple(d.get(k) for d in all_data) for k in key_set)
+
+    return json_data_matches
 
 
 def download_files(root: str, ids: list[str], batch_size: int = 20, force: bool = True):
@@ -238,27 +254,27 @@ def download_files(root: str, ids: list[str], batch_size: int = 20, force: bool 
     return downloaded_count, written_count
 
 
-def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool, tuple[bool, Any]]] = None) -> None:
+def list_files(matched_data: tuple[tuple[JsonData, ...]], filter_fn: Callable[[JsonData], Union[bool, Union[tuple[bool, Any], bool]]] = None) -> None:
     if filter_fn is None:
         def filter_fn(_):
             return True
 
     count = 0
-    for d in data:
-        result = filter_fn(d)
+    for match in matched_data:
+        result = filter_fn(*match)
 
         if isinstance(result, tuple):
             check, extra = result
             if check:
-                print(d.path, "|", str(extra))
+                print(match[0].name, "|", str(extra))
                 count += 1
 
         else:
             if result:
-                print(d.path)
+                print(match[0].name)
                 count += 1
 
-    print(f"({count}/{len(data)} match)")
+    print(f"({count}/{len(matched_data)} match)")
 
 
 if __name__ == "__main__":
