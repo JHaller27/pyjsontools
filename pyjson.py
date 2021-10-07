@@ -32,6 +32,10 @@ class JsonData:
         return JsonData(path=self._path, content=None)
 
     @property
+    def path(self) -> str:
+        return self._path
+
+    @property
     def value(self) -> Any:
         return self._content
 
@@ -101,7 +105,7 @@ class JsonListData(JsonData):
     def __repr__(self) -> str:
         return f"JsonListData(path='{self._path}', content='{self._content}'"
 
-    def __len__(self) -> str:
+    def __len__(self) -> int:
         return len(self._content)
 
     def __iter__(self) -> Iterator[JsonData]:
@@ -111,11 +115,12 @@ class JsonListData(JsonData):
         return map(lambda c: JsonData(path=self._path, content=c), self._content)
 
     def where(self, callback: Callable[['JsonData'], bool]) -> 'JsonData':
-        return [d for d in self if callback(d)]
+        return JsonListData(path=self._path, content=[d for d in self if callback(d)])
 
     def any(self, callback: Optional[Callable[['JsonData'], bool]] = None):
         if callback is None:
-            callback = lambda _: True
+            def callback(_):
+                return True
 
         for jd in self:
             if callback(jd):
@@ -125,7 +130,8 @@ class JsonListData(JsonData):
 
     def all(self, callback: Optional[Callable[['JsonData'], bool]] = None):
         if callback is None:
-            callback = lambda _: True
+            def callback(_):
+                return True
 
         for jd in self:
             if not callback(jd):
@@ -136,43 +142,44 @@ class JsonListData(JsonData):
 
 def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: bool = True) -> list[JsonData]:
     if match_fn is None:
-        match_fn = lambda p: p.endswith(".json")
+        def match_fn(p):
+            return p.endswith(".json")
 
     data: list[JsonData] = []
 
-    for root, dnames, fnames in os.walk(start):
-        for fname in fnames:
+    for root, d_names, f_names in os.walk(start):
+        for fname in f_names:
             path = os.path.join(root, fname)
             if not match_fn(path):
                 continue
 
             with open(path, "rb") as fin:
                 # Read file as bytes (opened in binary mode)
-                bdata = fin.read()
+                b_data = fin.read()
 
                 # Try to decode file content to string
                 try:
-                    sdata = bdata.decode("utf-8")
+                    s_data = b_data.decode("utf-8")
                 except UnicodeDecodeError:
-                    sdata = bdata.decode("latin1")
+                    s_data = b_data.decode("latin1")
 
                 # Ignore garbage at beginning
-                first_obj_idx = sdata.find("{")
+                first_obj_idx = s_data.find("{")
                 if first_obj_idx == -1:
-                    first_obj_idx = len(sdata)
+                    first_obj_idx = len(s_data)
 
-                first_arr_idx = sdata.find("[")
+                first_arr_idx = s_data.find("[")
                 if first_arr_idx == -1:
-                    first_arr_idx = len(sdata)
+                    first_arr_idx = len(s_data)
 
                 start_json_idx = min(first_obj_idx, first_arr_idx)
 
-                sdata = sdata[start_json_idx:]
+                s_data = s_data[start_json_idx:]
 
                 # Try parse as JSON
                 content = None
                 try:
-                    content = json.loads(sdata)
+                    content = json.loads(s_data)
                 except json.JSONDecodeError as err:
                     print(f"Warning: Failed to parse '{path}' as JSON")
                     print(f"\t{err}")
@@ -186,7 +193,7 @@ def load_files(start: str, match_fn: Callable[[str], bool] = None, *, recurse: b
     return data
 
 
-def download_files(root: str, ids: list[str], batchsize: int = 20, force: bool = True):
+def download_files(root: str, ids: list[str], batch_size: int = 20, force: bool = True):
     import requests
 
     out_root = Path(root)
@@ -198,8 +205,8 @@ def download_files(root: str, ids: list[str], batchsize: int = 20, force: bool =
         ids = list(set(ids) - set(existing_ids))
 
     all_products = []
-    for i in range(0, len(ids), batchsize):
-        ids_str = ','.join(ids[i:i+batchsize])
+    for i in range(0, len(ids), batch_size):
+        ids_str = ','.join(ids[i:i + batch_size])
         url = f'https://products.production.store-web.dynamics.com/products/v1/byBigCatId?clientType=storeWeb&catalogIds=1&ids={ids_str}&market=us&languages=en-us&ms-cv=python-test'
         print(url)
         resp = requests.get(url)
@@ -222,7 +229,7 @@ def download_files(root: str, ids: list[str], batchsize: int = 20, force: bool =
 
         written_count += 1
         if product['ProductId'] in new_ids:
-            print(f'Overwritting duplicate productId {product["ProductId"]}')
+            print(f'Overwriting duplicate productId {product["ProductId"]}')
         new_ids.add(product['ProductId'])
 
     with index_path.open('w') as fp:
@@ -231,9 +238,10 @@ def download_files(root: str, ids: list[str], batchsize: int = 20, force: bool =
     return downloaded_count, written_count
 
 
-def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool, tuple[bool, Any]]] = None) -> list[JsonData]:
+def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool, tuple[bool, Any]]] = None) -> None:
     if filter_fn is None:
-        filter_fn = lambda _: True
+        def filter_fn(_):
+            return True
 
     count = 0
     for d in data:
@@ -242,12 +250,12 @@ def list_files(data: list[JsonData], filter_fn: Callable[[JsonData], Union[bool,
         if isinstance(result, tuple):
             check, extra = result
             if check:
-                print(d._path, "|", str(extra))
+                print(d.path, "|", str(extra))
                 count += 1
 
         else:
             if result:
-                print(d._path)
+                print(d.path)
                 count += 1
 
     print(f"({count}/{len(data)} match)")
