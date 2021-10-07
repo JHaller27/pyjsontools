@@ -1,25 +1,31 @@
-from typing import Any
+import typer
+from pathlib import Path
+from typing import Any, Union
+
 import pyjson
-import sys
 
 
-data_dir = sys.argv[1]
-all_data = pyjson.load_files(data_dir)
+def is_valid(*data: pyjson.JsonData) -> Union[tuple[bool, Any], bool]:
+    datum = data[0]
+    if datum is None:
+        return False
+
+    lps = datum.many('Products').many('MarketProperties').many('BundleConfig').many('BundleSlots').many('LocalizedProperties')
+
+    slots = []
+    for lp in lps:
+        lang = lp.one('Language').value
+        slot_title = lp.one('SlotTitle').value
+        if lang == 'fr-ca':
+            slots.append((slot_title))
+
+    return True, set(slots)
 
 
-def wrong_order(lst: list):
-    for i in range(len(lst) - 1):
-        if lst[i] > lst[i+1]:
-            return True
-
-    return False
+def main(roots: list[Path], recurse: bool = True):
+    all_data = pyjson.load_files(*roots, recurse=recurse)
+    pyjson.list_files(all_data, filter_fn=is_valid)
 
 
-def is_valid(data: pyjson.JsonData) -> tuple[bool, Any]:
-    family = data.one("Product").one("ProductFamily")
-    pid = data.one("Product").one("ProductId")
-    # return family == "Bundles", family
-    return pid.has_data() and pid.value.upper() == "CFQTTC0K5DM", family
-
-
-pyjson.list_files(all_data, is_valid)
+if __name__ == "__main__":
+    typer.run(main)
